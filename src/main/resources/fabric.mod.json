@@ -1,0 +1,67 @@
+{
+  "schemaVersion": 1,
+  "id": "superbwarfare",
+  "version": "${version}",
+  "name": "SuperbWarfare",
+  "description": "An unofficial Fabric port of Superbwarfare",
+  "authors": [
+    "Sh1roCu"
+  ],
+  "contact": {},
+  "license": "GPL-3.0",
+  "icon": "logo.png",
+  "environment": "*",
+  "entrypoints": {
+    "fabric-datagen": [
+      "com.atsuishio.superbwarfare.datagen.DataGenerators"
+    ],
+    "client": [
+      "cn.sh1rocu.superbwarfare.client.SuperbWarfareFabricClient"
+    ],
+    "main": [
+      "cn.sh1rocu.superbwarfare.SuperbWarfareFabric"
+    ],
+    "modmenu": [
+      "cn.sh1rocu.superbwarfare.compat.modmenu.ModMenuApiImpl"
+    ],
+    "jei_mod_plugin": [
+      "com.atsuishio.superbwarfare.compat.jei.SbwJEIPlugin"
+    ],
+    "jade": [
+      "com.atsuishio.superbwarfare.compat.jade.SbwJadePlugin"
+    ],
+    "cardinal-components-entity": [
+      "com.atsuishio.superbwarfare.capability.ModCapabilities"
+    ]
+  },
+  "custom": {
+    "loom:injected_interfaces": {
+      "net/minecraft/class_1309": [
+        "cn/sh1rocu/superbwarfare/api/extension/mixin/ItemHandlerCapability"
+      ]
+    },
+    "cardinal-components": [
+      "superbwarfare:laser_capability",
+      "superbwarfare:player_variables"
+    ]
+  },
+  "mixins": [
+    "mixins.superbwarfare.json",
+    "superbwarfare.fabric.mixins.json"
+  ],
+  "accessWidener": "superbwarfare.accesswidener",
+  "depends": {
+    "fabricloader": ">=${loader_version}",
+    "fabric": "*",
+    "minecraft": [
+      "1.20",
+      "1.20.1"
+    ],
+    "forgeconfigapiport": "*",
+    "trinkets": "*",
+    "geckolib": "*"
+  },
+  "breaks": {
+    "geckoanimfix": "*"
+  }
+}

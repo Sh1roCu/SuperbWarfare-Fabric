@@ -1,0 +1,343 @@
+package com.atsuishio.superbwarfare.data.gun;
+
+import cn.sh1rocu.superbwarfare.util.forge.itemhandler.IItemHandler;
+import cn.sh1rocu.superbwarfare.util.forge.itemhandler.ItemHandlerHelper;
+import com.atsuishio.superbwarfare.Mod;
+import com.atsuishio.superbwarfare.annotation.ServerOnly;
+import com.atsuishio.superbwarfare.data.DataLoader;
+import com.atsuishio.superbwarfare.data.DeserializeFromString;
+import com.atsuishio.superbwarfare.data.Prop;
+import com.atsuishio.superbwarfare.data.StringToObject;
+import com.atsuishio.superbwarfare.tools.Ammo;
+import com.atsuishio.superbwarfare.tools.InventoryTool;
+import com.google.gson.Gson;
+import com.google.gson.JsonObject;
+import com.google.gson.annotations.SerializedName;
+import net.minecraft.core.registries.BuiltInRegistries;
+import net.minecraft.nbt.CompoundTag;
+import net.minecraft.nbt.TagParser;
+import net.minecraft.resources.ResourceLocation;
+import net.minecraft.util.Mth;
+import net.minecraft.world.entity.Entity;
+import net.minecraft.world.entity.LivingEntity;
+import net.minecraft.world.entity.player.Player;
+import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.item.Items;
+import org.jetbrains.annotations.NotNull;
+import org.jetbrains.annotations.Nullable;
+
+import java.util.HashMap;
+import java.util.Locale;
+import java.util.Map;
+import java.util.regex.Pattern;
+
+public class AmmoConsumer implements DeserializeFromString, GunPropertyModifier {
+    @SerializedName("Ammo")
+    public String ammo;
+
+    @SerializedName("AmmoSlot")
+    public String ammoSlot = "Default";
+
+    @ServerOnly
+    @SerializedName("Projectile")
+    public StringToObject<ProjectileInfo> projectile = null;
+
+    @SerializedName("Override")
+    public JsonObject override = null;
+
+    public transient AmmoConsumeType type = AmmoConsumeType.INVALID;
+    public transient int loadAmount = 1;
+
+    public static final AmmoConsumer INVALID = new AmmoConsumer();
+
+    private transient boolean initialized = false;
+    private transient Ammo playerAmmoType;
+    private transient ItemStack stack = ItemStack.EMPTY;
+
+    public ItemStack stack() {
+        return this.stack;
+    }
+
+    public boolean initialized() {
+        return this.initialized;
+    }
+
+    private transient final Map<GunProp<?>, Prop.PropModifyContext<GunData, DefaultGunData, ?>> modifiers = new HashMap<>();
+
+    @Override
+    @SuppressWarnings("unchecked")
+    public @NotNull Map<GunProp<?>, Prop.PropModifyContext<GunData, DefaultGunData, ?>> getPropModifiers() {
+        return this.modifiers;
+    }
+
+    public enum AmmoConsumeType {
+        INVALID,
+        EMPTY,
+        INFINITE,
+
+        PLAYER_AMMO,
+        ITEM,
+    }
+
+    /**
+     * 消耗指定弹药数量（原始数量，不包括虚拟弹药，不考虑count）
+     */
+    public int consume(@NotNull GunData data, @NotNull Entity shooter, int count) {
+        if (count <= 0
+                || this.type == AmmoConsumeType.INFINITE
+                || shooter instanceof Player player && player.isCreative()
+        ) return 0;
+        if (!initialized) init();
+
+        if (type == AmmoConsumeType.INVALID) {
+            Mod.LOGGER.warn("consume ammo failed: invalid AmmoConsumeType");
+            return 0;
+        }
+
+        int consumed = 0;
+        if (type == AmmoConsumeType.PLAYER_AMMO) {
+            if (shooter instanceof Player player) {
+                if (playerAmmoType != null) {
+                    var current = playerAmmoType.get(player);
+                    consumed = Math.min(current, count);
+                    count -= consumed;
+                    playerAmmoType.add(player, -consumed);
+                } else {
+                    Mod.LOGGER.warn("consume player ammo failed: invalid player ammo type");
+                }
+            } else {
+                Mod.LOGGER.warn("consume player ammo failed: invalid shooter");
+            }
+        }
+
+        var handler = ((LivingEntity) shooter).sw$getItemHandler(null).resolve().orElse(null);
+        if (handler != null) {
+            return consumed + consume(data, handler, count);
+        } else {
+            Mod.LOGGER.warn("consume ammo failed: invalid item handler for entity {}", shooter);
+            return consumed;
+        }
+    }
+
+    /**
+     * 消耗指定弹药数量（原始数量，不包括虚拟弹药，不考虑count）
+     */
+    public int consume(@NotNull GunData data, @NotNull IItemHandler handler, int count) {
+        if (type == AmmoConsumeType.INVALID
+                || type == AmmoConsumeType.INFINITE
+                || type == AmmoConsumeType.EMPTY
+                || count <= 0
+        ) return 0;
+        if (!initialized) init();
+
+        if (type == AmmoConsumeType.PLAYER_AMMO) {
+            var consumed = InventoryTool.consumeAmmoItem(handler, this.playerAmmoType, count);
+            var rest = consumed - count;
+            data.virtualAmmo.add(rest);
+            return count;
+        } else {
+            return InventoryTool.consumeItem(handler, stack -> ItemStack.isSameItemSameTags(stack, this.stack), count);
+        }
+    }
+
+    /**
+     * 清点不包括虚拟弹药在内的原始弹药数量
+     */
+    public int count(@Nullable Entity entity) {
+        if (this.type == AmmoConsumeType.INFINITE) return Integer.MAX_VALUE;
+        if (entity == null || type == AmmoConsumeType.EMPTY) return 0;
+        if (!initialized) init();
+
+        int playerAmmoCount = 0;
+        if (type == AmmoConsumeType.PLAYER_AMMO && entity instanceof Player player) {
+            playerAmmoCount = playerAmmoType.get(player);
+        }
+
+        return playerAmmoCount + count(((LivingEntity) entity).sw$getItemHandler(null).resolve().orElse(null));
+    }
+
+    /**
+     * 清点不包括虚拟弹药在内的原始弹药数量
+     */
+    public int count(@Nullable IItemHandler handler) {
+        if (this.type == AmmoConsumeType.INFINITE) return Integer.MAX_VALUE;
+        if (handler == null || type == AmmoConsumeType.EMPTY) return 0;
+        if (!initialized) init();
+
+        if (type == AmmoConsumeType.ITEM) {
+            return InventoryTool.countItem(handler, stack -> ItemStack.isSameItemSameTags(stack, this.stack));
+        }
+
+        return InventoryTool.countAmmoItem(handler, this.playerAmmoType);
+    }
+
+    /**
+     * 返还指定数量的弹药
+     * <br>
+     * 注：不会实际消耗枪内弹药
+     *
+     * @return 成功返还的弹药数量
+     */
+    public int withdraw(@NotNull Entity shooter, int count) {
+        if (type == AmmoConsumeType.INVALID
+                || type == AmmoConsumeType.INFINITE
+                || type == AmmoConsumeType.EMPTY
+                || count <= 0
+        ) {
+            return 0;
+        }
+        if (!initialized) init();
+
+        if (type == AmmoConsumeType.PLAYER_AMMO) {
+            if (shooter instanceof Player player) {
+                if (playerAmmoType != null) {
+                    playerAmmoType.add(player, count);
+                    return count;
+                } else {
+                    Mod.LOGGER.warn("withdraw player ammo failed: invalid player ammo type");
+                }
+            } else {
+                Mod.LOGGER.warn("withdraw player ammo failed: invalid shooter");
+            }
+        } else {
+            if (shooter instanceof Player player) {
+                ItemHandlerHelper.giveItemToPlayer(player, this.stack.copyWithCount(count));
+                return count;
+            } else {
+                var itemHandler = ((LivingEntity) shooter).sw$getItemHandler(null).resolve().orElse(null);
+                if (itemHandler != null) {
+                    return withdraw(itemHandler, count);
+                } else {
+                    Mod.LOGGER.warn("withdraw ammo failed: invalid item handler");
+                }
+            }
+        }
+        return 0;
+    }
+
+    public int withdraw(@NotNull IItemHandler handler, int count) {
+        if (type == AmmoConsumeType.INVALID
+                || type == AmmoConsumeType.INFINITE
+                || type == AmmoConsumeType.EMPTY
+                || count <= 0
+        ) {
+            return 0;
+        }
+        if (!initialized) init();
+
+        var copiedStack = this.stack.copyWithCount(count);
+        var result = ItemHandlerHelper.insertItemStacked(handler, copiedStack, false);
+
+        int inserted = count - result.getCount();
+        if (!result.isEmpty()) {
+            Mod.LOGGER.warn("trying to withdraw ammo {} with count {}, but only {} is inserted", copiedStack, count, inserted);
+        }
+        return inserted;
+    }
+
+    private static final Pattern AMMO_PATTERN = Pattern.compile("^(?<count>(\\d+)?)\\s*(?<prefix>[@#]?)(?<id>\\w+(:\\w+)?)\\s*(?<data>(\\{.*})?)$");
+    private static final Gson GSON = DataLoader.GSON;
+
+    @SuppressWarnings("unchecked")
+    private void parseOverrideValues() {
+        if (override != null) {
+            for (var element : override.entrySet()) {
+                var key = element.getKey();
+                var prop = GunProp.getByName(key);
+                if (prop == null) {
+                    Mod.LOGGER.warn("invalid override key: {}", key);
+                    continue;
+                }
+
+                try {
+                    var parsedValue = GSON.fromJson(element.getValue().toString(), prop.getFieldType());
+                    this.setProperty((GunProp<Object>) prop, value -> parsedValue);
+                } catch (Exception exception) {
+                    Mod.LOGGER.error("invalid override value for key {}: {}", key, element.getValue());
+                }
+            }
+        }
+    }
+
+    @SuppressWarnings("invalid")
+    public void init() {
+        parseOverrideValues();
+
+        if (this.projectile != null) {
+            this.setProperty(GunProp.PROJECTILE, value -> projectile.value);
+        }
+
+        this.type = AmmoConsumeType.INVALID;
+
+        if (ammo == null || ammo.isEmpty() || ammo.toLowerCase(Locale.ROOT).equals("empty")) {
+            this.type = AmmoConsumeType.EMPTY;
+            return;
+        }
+
+        if (ammo.toLowerCase(Locale.ROOT).equals("infinity") || ammo.toLowerCase(Locale.ROOT).equals("infinite")) {
+            this.type = AmmoConsumeType.INFINITE;
+            return;
+        }
+
+        var matcher = AMMO_PATTERN.matcher(ammo.trim());
+        if (!matcher.matches()) {
+            Mod.LOGGER.warn("invalid ammo value: {}", ammo);
+            return;
+        }
+
+        var numStr = matcher.group("count").trim();
+        this.loadAmount = Mth.clamp(numStr.isEmpty() ? 1 : Integer.parseInt(numStr), 1, Integer.MAX_VALUE);
+
+        var prefix = matcher.group("prefix");
+        var id = matcher.group("id");
+        var data = matcher.group("data");
+
+        if ("@".equals(prefix)) {
+            this.playerAmmoType = Ammo.getType(id);
+            if (this.playerAmmoType == null) {
+                Mod.LOGGER.warn("invalid player ammo type: {}", id);
+                return;
+            }
+            this.type = AmmoConsumeType.PLAYER_AMMO;
+        } else {
+            var location = ResourceLocation.tryParse(id);
+            if (location == null) {
+                Mod.LOGGER.warn("invalid item id: {}", id);
+                return;
+            }
+            var item = BuiltInRegistries.ITEM.get(location);
+            if (item == Items.AIR) {
+                Mod.LOGGER.warn("invalid item: {}", id);
+                return;
+            }
+
+            this.stack = new ItemStack(item);
+            if (!data.isEmpty()) {
+                try {
+                    var tag = new CompoundTag();
+                    tag.put("tag", TagParser.parseTag(data));
+                    tag.putString("id", location.toString());
+                    tag.putInt("Count", 1);
+                    this.stack = ItemStack.of(tag);
+                } catch (Exception exception) {
+                    Mod.LOGGER.warn("invalid item data {}: {}", data, exception.getMessage());
+                    return;
+                }
+            }
+
+            this.type = AmmoConsumeType.ITEM;
+        }
+
+        this.initialized = true;
+    }
+
+    @Override
+    public void deserializeFromString(String str) {
+        this.ammo = str;
+        init();
+    }
+
+    public Ammo getPlayerAmmoType() {
+        return playerAmmoType;
+    }
+}

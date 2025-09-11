@@ -1,0 +1,103 @@
+package com.atsuishio.superbwarfare.menu;
+
+import com.atsuishio.superbwarfare.entity.vehicle.VehicleAssemblingTableVehicleEntity;
+import com.atsuishio.superbwarfare.init.ModMenuTypes;
+import com.atsuishio.superbwarfare.network.message.receive.FinishAssemblingVehicleMessage;
+import com.atsuishio.superbwarfare.recipe.vehicle.VehicleAssemblingRecipe;
+import it.unimi.dsi.fastutil.ints.Int2IntArrayMap;
+import net.minecraft.resources.ResourceLocation;
+import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.world.entity.item.ItemEntity;
+import net.minecraft.world.entity.player.Inventory;
+import net.minecraft.world.entity.player.Player;
+import net.minecraft.world.inventory.AbstractContainerMenu;
+import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.item.crafting.Recipe;
+import net.minecraft.world.item.crafting.RecipeManager;
+import net.minecraft.world.level.Level;
+import org.jetbrains.annotations.NotNull;
+import org.jetbrains.annotations.Nullable;
+
+public class VehicleAssemblingMenu extends AbstractContainerMenu {
+
+    private final boolean isVehicleMenu;
+
+    public VehicleAssemblingMenu(int pContainerId, Inventory inventory) {
+        super(ModMenuTypes.VEHICLE_ASSEMBLING_MENU, pContainerId);
+        this.isVehicleMenu = false;
+    }
+
+    public VehicleAssemblingMenu(int pContainerId, Inventory inventory, boolean isVehicleMenu) {
+        super(ModMenuTypes.VEHICLE_ASSEMBLING_MENU, pContainerId);
+        this.isVehicleMenu = isVehicleMenu;
+    }
+
+    @Override
+    public @NotNull ItemStack quickMoveStack(@NotNull Player pPlayer, int pIndex) {
+        return ItemStack.EMPTY;
+    }
+
+    @Override
+    public boolean stillValid(Player pPlayer) {
+        return (pPlayer.isAlive() && !this.isVehicleMenu) || (this.isVehicleMenu && pPlayer.getVehicle() instanceof VehicleAssemblingTableVehicleEntity);
+    }
+
+    /**
+     * Code based on TaC-Z
+     */
+    public void assembleVehicle(ResourceLocation id, ServerPlayer player) {
+        var recipe = this.getRecipeById(id, player.level().getRecipeManager());
+        if (recipe == null) return;
+        player.sw$getItemHandler(null).ifPresent(handler -> {
+            if (!player.isCreative()) {
+                Int2IntArrayMap recordCount = new Int2IntArrayMap();
+                var ingredients = recipe.getInputs();
+
+                for (var ingredient : ingredients) {
+                    int count = 0;
+
+                    for (int i = 0; i < handler.getSlots(); ++i) {
+                        ItemStack stack = handler.getStackInSlot(i);
+                        int stackCount = stack.getCount();
+                        if (!stack.isEmpty() && ingredient.getIngredient().test(stack)) {
+                            count += stackCount;
+                            if (count > ingredient.getCount()) {
+                                int remaining = count - ingredient.getCount();
+                                recordCount.put(i, stackCount - remaining);
+                                break;
+                            }
+                            recordCount.put(i, stackCount);
+                        }
+                    }
+
+                    if (count < ingredient.getCount()) {
+                        return;
+                    }
+                }
+
+                for (int slotIndex : recordCount.keySet()) {
+                    handler.extractItem(slotIndex, recordCount.get(slotIndex), false);
+                }
+            }
+
+            Level level = player.level();
+            if (!level.isClientSide) {
+                ItemEntity itemEntity = new ItemEntity(level, player.getX(), player.getY() + 0.5, player.getZ(), recipe.getResultItem(player.level().registryAccess()).copy());
+                itemEntity.setPickUpDelay(0);
+                level.addFreshEntity(itemEntity);
+            }
+
+            player.inventoryMenu.broadcastFullState();
+            new FinishAssemblingVehicleMessage(this.containerId).send(player);
+        });
+    }
+
+    @Nullable
+    public VehicleAssemblingRecipe getRecipeById(ResourceLocation id, RecipeManager recipeManager) {
+        Recipe<?> recipe = recipeManager.byKey(id).orElse(null);
+        if (recipe instanceof VehicleAssemblingRecipe assemblingRecipe) {
+            return assemblingRecipe;
+        }
+        return null;
+    }
+}

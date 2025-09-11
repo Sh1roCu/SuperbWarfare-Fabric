@@ -1,0 +1,8 @@
+{
+  "replace": false,
+  "values": [
+    "superbwarfare:projectile_explosion",
+    "superbwarfare:custom_explosion",
+    "superbwarfare:lunge_mine"
+  ]
+}

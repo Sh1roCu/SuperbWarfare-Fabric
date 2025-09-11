@@ -1,0 +1,174 @@
+package com.atsuishio.superbwarfare.init;
+
+import com.atsuishio.superbwarfare.Mod;
+import com.atsuishio.superbwarfare.config.server.SpawnConfig;
+import com.atsuishio.superbwarfare.entity.*;
+import com.atsuishio.superbwarfare.entity.projectile.*;
+import com.atsuishio.superbwarfare.entity.vehicle.*;
+import net.fabricmc.fabric.api.object.builder.v1.entity.FabricDefaultAttributeRegistry;
+import net.fabricmc.fabric.api.object.builder.v1.entity.FabricEntityTypeBuilder;
+import net.minecraft.core.Registry;
+import net.minecraft.core.registries.BuiltInRegistries;
+import net.minecraft.world.Difficulty;
+import net.minecraft.world.entity.*;
+import net.minecraft.world.entity.monster.Monster;
+import net.minecraft.world.level.levelgen.Heightmap;
+
+public class ModEntities {
+
+    public static void init() {
+        onRegisterSpawnPlacement();
+        registerAttributes();
+    }
+
+    // Living Entities
+    public static final EntityType<TargetEntity> TARGET = register("target",
+            EntityType.Builder.<TargetEntity>of(TargetEntity::new, MobCategory.CREATURE).clientTrackingRange(64).updateInterval(3).fireImmune().sized(0.875f, 2f));
+    public static final EntityType<DPSGeneratorEntity> DPS_GENERATOR = register("dps_generator",
+            EntityType.Builder.<DPSGeneratorEntity>of(DPSGeneratorEntity::new, MobCategory.CREATURE).clientTrackingRange(64).updateInterval(3).fireImmune().sized(0.875f, 2f));
+    public static final EntityType<SenpaiEntity> SENPAI = register("senpai",
+            EntityType.Builder.<SenpaiEntity>of(SenpaiEntity::new, MobCategory.MONSTER).clientTrackingRange(64).updateInterval(3).sized(0.6f, 2f));
+
+    // Misc Entities
+    public static final EntityType<LaserEntity> LASER = register("laser",
+            EntityType.Builder.<LaserEntity>of(LaserEntity::new, MobCategory.MISC).sized(0.1f, 0.1f).fireImmune().updateInterval(1));
+    public static final EntityType<FlareDecoyEntity> FLARE_DECOY = register("flare_decoy",
+            EntityType.Builder.<FlareDecoyEntity>of(FlareDecoyEntity::new, MobCategory.MISC).clientTrackingRange(64).updateInterval(1).noSave().sized(1f, 1f));
+    public static final EntityType<SmokeDecoyEntity> SMOKE_DECOY = register("smoke_decoy",
+            EntityType.Builder.<SmokeDecoyEntity>of(SmokeDecoyEntity::new, MobCategory.MISC).clientTrackingRange(64).updateInterval(1).noSave().sized(4.5f, 4.5f));
+    public static final EntityType<ClaymoreEntity> CLAYMORE = register("claymore",
+            EntityType.Builder.<ClaymoreEntity>of(ClaymoreEntity::new, MobCategory.MISC).clientTrackingRange(64).updateInterval(1).sized(0.25f, 0.25f));
+
+    public static final EntityType<Blu43Entity> BLU_43 = register("blu_43",
+            EntityType.Builder.<Blu43Entity>of(Blu43Entity::new, MobCategory.MISC).clientTrackingRange(32).updateInterval(1).sized(0.12f, 0.05f));
+
+    public static final EntityType<Tm62Entity> TM_62 = register("tm_62",
+            EntityType.Builder.<Tm62Entity>of(Tm62Entity::new, MobCategory.MISC).clientTrackingRange(32).updateInterval(1).sized(0.5f, 0.15f));
+    public static final EntityType<Ptkm1rEntity> PTKM_1R = register("ptkm_1r",
+            EntityType.Builder.<Ptkm1rEntity>of(Ptkm1rEntity::new, MobCategory.MISC).clientTrackingRange(64).updateInterval(1).sized(0.2f, 0.7f));
+    public static final EntityType<C4Entity> C_4 = register("c4",
+            EntityType.Builder.<C4Entity>of(C4Entity::new, MobCategory.MISC).clientTrackingRange(64).updateInterval(1).sized(0.5f, 0.5f));
+
+    public static final EntityType<MedicalKitEntity> MEDICAL_KIT = register("medical_kit",
+            EntityType.Builder.of(MedicalKitEntity::new, MobCategory.MISC).clientTrackingRange(64).updateInterval(1).sized(0.4f, 0.2f));
+    public static final EntityType<WaterMaskEntity> WATER_MASK = register("water_mask",
+            EntityType.Builder.of(WaterMaskEntity::new, MobCategory.MISC).clientTrackingRange(64).updateInterval(3).sized(1f, 1f).noSave().noSummon().fireImmune());
+
+    // Projectiles
+    public static final EntityType<TaserBulletEntity> TASER_BULLET = register("taser_bullet",
+            EntityType.Builder.<TaserBulletEntity>of(TaserBulletEntity::new, MobCategory.MISC).clientTrackingRange(64).noSave()
+                    .updateInterval(1).sized(0.25f, 0.25f));
+
+    // Fast Projectiles
+    public static final EntityType<SmallCannonShellEntity> SMALL_CANNON_SHELL = register("small_cannon_shell",
+            FabricEntityTypeBuilder.<SmallCannonShellEntity>create(MobCategory.MISC, SmallCannonShellEntity::new).forceTrackedVelocityUpdates(false).trackRangeChunks(64).trackedUpdateRate(1).disableSaving().dimensions(EntityDimensions.scalable(0.25f, 0.25f)));
+    public static final EntityType<RpgRocketEntity> RPG_ROCKET = register("rpg_rocket",
+            FabricEntityTypeBuilder.<RpgRocketEntity>create(MobCategory.MISC, RpgRocketEntity::new).forceTrackedVelocityUpdates(false).trackRangeChunks(64).trackedUpdateRate(1).disableSaving().dimensions(EntityDimensions.scalable(0.5f, 0.5f)));
+    public static final EntityType<MortarShellEntity> MORTAR_SHELL = register("mortar_shell",
+            FabricEntityTypeBuilder.<MortarShellEntity>create(MobCategory.MISC, MortarShellEntity::new).forceTrackedVelocityUpdates(false).trackRangeChunks(64).trackedUpdateRate(1).disableSaving().dimensions(EntityDimensions.scalable(0.5f, 0.5f)));
+    public static final EntityType<ProjectileEntity> PROJECTILE = register("projectile",
+            FabricEntityTypeBuilder.<ProjectileEntity>create(MobCategory.MISC, ProjectileEntity::new).forceTrackedVelocityUpdates(false).trackRangeChunks(64).disableSaving().disableSummon().dimensions(EntityDimensions.scalable(0.25f, 0.25f)));
+    public static final EntityType<CannonShellEntity> CANNON_SHELL = register("cannon_shell",
+            FabricEntityTypeBuilder.<CannonShellEntity>create(MobCategory.MISC, CannonShellEntity::new).forceTrackedVelocityUpdates(false).trackRangeChunks(64).trackedUpdateRate(1).disableSaving().dimensions(EntityDimensions.scalable(0.75f, 0.75f)));
+    public static final EntityType<GunGrenadeEntity> GUN_GRENADE = register("gun_grenade",
+            FabricEntityTypeBuilder.<GunGrenadeEntity>create(MobCategory.MISC, GunGrenadeEntity::new).forceTrackedVelocityUpdates(false).trackRangeChunks(64).trackedUpdateRate(1).disableSaving().dimensions(EntityDimensions.scalable(0.5f, 0.5f)));
+    public static final EntityType<GrapeshotEntity> GRAPESHOT = register("grapeshot",
+            FabricEntityTypeBuilder.<GrapeshotEntity>create(MobCategory.MISC, GrapeshotEntity::new).forceTrackedVelocityUpdates(false).trackRangeChunks(64).trackedUpdateRate(1).disableSaving().dimensions(EntityDimensions.scalable(0.5f, 0.5f)));
+    public static final EntityType<MelonBombEntity> MELON_BOMB = register("melon_bomb",
+            FabricEntityTypeBuilder.<MelonBombEntity>create(MobCategory.MISC, MelonBombEntity::new).forceTrackedVelocityUpdates(false).trackRangeChunks(64).trackedUpdateRate(1).disableSaving().dimensions(EntityDimensions.scalable(1f, 1f)));
+    public static final EntityType<PtkmProjectileEntity> PTKM_PROJECTILE = register("ptkm_projectile",
+            FabricEntityTypeBuilder.<PtkmProjectileEntity>create(MobCategory.MISC, PtkmProjectileEntity::new).forceTrackedVelocityUpdates(false).trackRangeChunks(64).trackedUpdateRate(1).disableSaving().dimensions(EntityDimensions.scalable(0.5f, 0.5f)));
+    public static final EntityType<HandGrenadeEntity> HAND_GRENADE = register("hand_grenade",
+            FabricEntityTypeBuilder.<HandGrenadeEntity>create(MobCategory.MISC, HandGrenadeEntity::new).forceTrackedVelocityUpdates(true).trackRangeChunks(64).trackedUpdateRate(1).disableSaving().dimensions(EntityDimensions.scalable(0.3f, 0.3f)));
+    public static final EntityType<RgoGrenadeEntity> RGO_GRENADE = register("rgo_grenade",
+            FabricEntityTypeBuilder.<RgoGrenadeEntity>create(MobCategory.MISC, RgoGrenadeEntity::new).forceTrackedVelocityUpdates(true).trackRangeChunks(64).trackedUpdateRate(1).disableSaving().dimensions(EntityDimensions.scalable(0.3f, 0.3f)));
+    public static final EntityType<M18SmokeGrenadeEntity> M18_SMOKE_GRENADE = register("m18_smoke_grenade",
+            FabricEntityTypeBuilder.<M18SmokeGrenadeEntity>create(MobCategory.MISC, M18SmokeGrenadeEntity::new).forceTrackedVelocityUpdates(true).trackRangeChunks(64).trackedUpdateRate(1).disableSaving().dimensions(EntityDimensions.scalable(0.3f, 0.3f)));
+    public static final EntityType<JavelinMissileEntity> JAVELIN_MISSILE = register("javelin_missile",
+            FabricEntityTypeBuilder.<JavelinMissileEntity>create(MobCategory.MISC, JavelinMissileEntity::new).forceTrackedVelocityUpdates(false).trackRangeChunks(64).trackedUpdateRate(1).disableSaving().dimensions(EntityDimensions.scalable(0.5f, 0.5f)));
+    public static final EntityType<Agm65Entity> AGM_65 = register("agm_65",
+            FabricEntityTypeBuilder.<Agm65Entity>create(MobCategory.MISC, Agm65Entity::new).forceTrackedVelocityUpdates(false).trackRangeChunks(64).trackedUpdateRate(1).disableSaving().dimensions(EntityDimensions.scalable(0.75f, 0.75f)));
+    public static final EntityType<SmallRocketEntity> SMALL_ROCKET = register("small_rocket",
+            FabricEntityTypeBuilder.<SmallRocketEntity>create(MobCategory.MISC, SmallRocketEntity::new).forceTrackedVelocityUpdates(false).trackRangeChunks(64).trackedUpdateRate(1).disableSaving().dimensions(EntityDimensions.scalable(0.5f, 0.5f)));
+    public static final EntityType<MediumRocketEntity> MEDIUM_ROCKET = register("medium_rocket",
+            FabricEntityTypeBuilder.<MediumRocketEntity>create(MobCategory.MISC, MediumRocketEntity::new).forceTrackedVelocityUpdates(false).trackRangeChunks(64).trackedUpdateRate(1).disableSaving().dimensions(EntityDimensions.scalable(0.5f, 0.5f)));
+    public static final EntityType<WgMissileEntity> WG_MISSILE = register("wg_missile",
+            FabricEntityTypeBuilder.<WgMissileEntity>create(MobCategory.MISC, WgMissileEntity::new).forceTrackedVelocityUpdates(false).trackRangeChunks(64).trackedUpdateRate(1).disableSaving().fireImmune().dimensions(EntityDimensions.scalable(0.5f, 0.5f)));
+    public static final EntityType<SwarmDroneEntity> SWARM_DRONE = register("swarm_drone",
+            FabricEntityTypeBuilder.<SwarmDroneEntity>create(MobCategory.MISC, SwarmDroneEntity::new).forceTrackedVelocityUpdates(false).trackRangeChunks(64).trackedUpdateRate(1).disableSaving().fireImmune().dimensions(EntityDimensions.scalable(0.5f, 0.5f)));
+    public static final EntityType<Mk82Entity> MK_82 = register("mk_82",
+            FabricEntityTypeBuilder.<Mk82Entity>create(MobCategory.MISC, Mk82Entity::new).forceTrackedVelocityUpdates(false).trackRangeChunks(64).trackedUpdateRate(1).disableSaving().dimensions(EntityDimensions.scalable(0.8f, 0.8f)));
+
+    // Vehicles
+    // Turrets
+    public static final EntityType<Type63Entity> TYPE_63 = register("type_63",
+            EntityType.Builder.<Type63Entity>of(Type63Entity::new, MobCategory.MISC).clientTrackingRange(64).updateInterval(1).fireImmune().sized(1f, 1.5f));
+    public static final EntityType<Mk42Entity> MK_42 = register("mk_42",
+            EntityType.Builder.<Mk42Entity>of(Mk42Entity::new, MobCategory.MISC).clientTrackingRange(64).updateInterval(3).fireImmune().sized(3.4f, 3.5f));
+    public static final EntityType<Hpj11Entity> HPJ_11 = register("hpj_11",
+            EntityType.Builder.<Hpj11Entity>of(Hpj11Entity::new, MobCategory.MISC).clientTrackingRange(64).updateInterval(3).fireImmune().sized(2.8f, 2.4f));
+    public static final EntityType<Mle1934Entity> MLE_1934 = register("mle_1934",
+            EntityType.Builder.<Mle1934Entity>of(Mle1934Entity::new, MobCategory.MISC).clientTrackingRange(64).updateInterval(3).fireImmune().sized(4.5f, 2.8f));
+    public static final EntityType<Bl132Entity> BL_132 = register("bl_132",
+            EntityType.Builder.<Bl132Entity>of(Bl132Entity::new, MobCategory.MISC).clientTrackingRange(64).updateInterval(3).fireImmune().sized(7f, 4.4375f));
+    public static final EntityType<AnnihilatorEntity> ANNIHILATOR = register("annihilator",
+            EntityType.Builder.<AnnihilatorEntity>of(AnnihilatorEntity::new, MobCategory.MISC).clientTrackingRange(64).updateInterval(3).fireImmune().sized(13f, 4.2f));
+    public static final EntityType<LaserTowerEntity> LASER_TOWER = register("laser_tower",
+            EntityType.Builder.<LaserTowerEntity>of(LaserTowerEntity::new, MobCategory.MISC).clientTrackingRange(64).updateInterval(1).fireImmune().sized(0.9f, 1.65f));
+    public static final EntityType<WaveforceTowerEntity> WAVEFORCE_TOWER = register("waveforce_tower",
+            EntityType.Builder.<WaveforceTowerEntity>of(WaveforceTowerEntity::new, MobCategory.MISC).clientTrackingRange(64).updateInterval(1).fireImmune().sized(1.75f, 3.3f));
+
+    // Boats
+    public static final EntityType<SpeedboatEntity> SPEEDBOAT = register("speedboat",
+            EntityType.Builder.<SpeedboatEntity>of(SpeedboatEntity::new, MobCategory.MISC).clientTrackingRange(64).updateInterval(1).fireImmune().sized(3.0f, 2.0f));
+
+    // Land Vehicles
+    public static final EntityType<WheelChairEntity> WHEEL_CHAIR = register("wheel_chair",
+            EntityType.Builder.<WheelChairEntity>of(WheelChairEntity::new, MobCategory.MISC).clientTrackingRange(64).updateInterval(1).fireImmune().sized(1.0f, 1.0f));
+    public static final EntityType<Lav150Entity> LAV_150 = register("lav_150",
+            EntityType.Builder.<Lav150Entity>of(Lav150Entity::new, MobCategory.MISC).clientTrackingRange(64).updateInterval(1).fireImmune().sized(2.8f, 3.1f));
+    public static final EntityType<Bmp2Entity> BMP_2 = register("bmp_2",
+            EntityType.Builder.<Bmp2Entity>of(Bmp2Entity::new, MobCategory.MISC).clientTrackingRange(64).updateInterval(1).fireImmune().sized(4f, 3f));
+    public static final EntityType<Yx100Entity> YX_100 = register("yx_100",
+            EntityType.Builder.<Yx100Entity>of(Yx100Entity::new, MobCategory.MISC).clientTrackingRange(64).updateInterval(1).fireImmune().sized(4.6f, 3.25f));
+    public static final EntityType<PrismTankEntity> PRISM_TANK = register("prism_tank",
+            EntityType.Builder.<PrismTankEntity>of(PrismTankEntity::new, MobCategory.MISC).clientTrackingRange(64).updateInterval(1).fireImmune().sized(5f, 2.6f));
+
+    // Aircraft
+    public static final EntityType<Tom6Entity> TOM_6 = register("tom_6",
+            EntityType.Builder.<Tom6Entity>of(Tom6Entity::new, MobCategory.MISC).clientTrackingRange(64).updateInterval(1).fireImmune().sized(1.05f, 1.0f));
+    public static final EntityType<Ah6Entity> AH_6 = register("ah_6",
+            EntityType.Builder.<Ah6Entity>of(Ah6Entity::new, MobCategory.MISC).clientTrackingRange(64).updateInterval(1).fireImmune().sized(3f, 2.9f));
+    public static final EntityType<A10Entity> A_10A = register("a_10a",
+            EntityType.Builder.<A10Entity>of(A10Entity::new, MobCategory.MISC).clientTrackingRange(64).updateInterval(1).fireImmune().sized(9f, 3.5f));
+
+    // Special
+    public static final EntityType<DroneEntity> DRONE = register("drone",
+            EntityType.Builder.<DroneEntity>of(DroneEntity::new, MobCategory.MISC).clientTrackingRange(64).updateInterval(1).sized(0.6f, 0.2f));
+    public static final EntityType<MortarEntity> MORTAR = register("mortar",
+            EntityType.Builder.<MortarEntity>of(MortarEntity::new, MobCategory.MISC).clientTrackingRange(64).updateInterval(1).fireImmune().sized(0.8f, 1.4f));
+
+    public static final EntityType<VehicleAssemblingTableVehicleEntity> VEHICLE_ASSEMBLING_TABLE = register("vehicle_assembling_table",
+            EntityType.Builder.<VehicleAssemblingTableVehicleEntity>of(VehicleAssemblingTableVehicleEntity::new, MobCategory.MISC).clientTrackingRange(64).updateInterval(1).fireImmune().sized(2, 1.875f));
+
+    private static <T extends Entity> EntityType<T> register(String name, EntityType.Builder<T> entityTypeBuilder) {
+        return Registry.register(BuiltInRegistries.ENTITY_TYPE, Mod.loc(name), entityTypeBuilder.build(name));
+    }
+
+    private static <T extends Entity> EntityType<T> register(String name, FabricEntityTypeBuilder<T> entityTypeBuilder) {
+        return Registry.register(BuiltInRegistries.ENTITY_TYPE, Mod.loc(name), entityTypeBuilder.build());
+    }
+
+    public static void onRegisterSpawnPlacement() {
+        SpawnPlacements.register(ModEntities.SENPAI, SpawnPlacements.Type.ON_GROUND, Heightmap.Types.MOTION_BLOCKING_NO_LEAVES,
+                (entityType, world, reason, pos, random) -> (world.getDifficulty() != Difficulty.PEACEFUL && SpawnConfig.SPAWN_SENPAI.get()
+                        && Monster.isDarkEnoughToSpawn(world, pos, random) && Mob.checkMobSpawnRules(entityType, world, reason, pos, random))/*,
+                SpawnPlacementRegisterEvent.Operation.OR*/);
+    }
+
+    public static void registerAttributes() {
+        FabricDefaultAttributeRegistry.register(TARGET, TargetEntity.createAttributes().build());
+        FabricDefaultAttributeRegistry.register(DPS_GENERATOR, DPSGeneratorEntity.createAttributes().build());
+        FabricDefaultAttributeRegistry.register(SENPAI, SenpaiEntity.createAttributes().build());
+    }
+}

@@ -1,0 +1,55 @@
+{
+  "required": true,
+  "minVersion": "0.8",
+  "package": "cn.sh1rocu.superbwarfare.mixin",
+  "compatibilityLevel": "JAVA_17",
+  "refmap": "superbwarfare.refmap.json",
+  "mixins": [
+    "accessor.AnvilMenuAccessor",
+    "accessor.ItemStackAccessor",
+    "accessor.MobAccessor",
+    "accessor.ServerLevelAccessor",
+    "common.AnvilMenuMixin",
+    "common.BundlePacketMixin",
+    "common.EnchantmentHelperMixin",
+    "common.EnchantmentMixin",
+    "common.EntityMixin",
+    "common.ItemEntityMixin",
+    "common.ItemStackMixin",
+    "common.LivingEntityMixin",
+    "common.MobMixin",
+    "common.PersistentEntitySectionManagerMixin",
+    "common.PlayerListMixin",
+    "common.ResultSlotMixin",
+    "common.ServerLevelMixin",
+    "common.ServerLevelMixin$EntityCallbacksMixin",
+    "common.ServerPlayerMixin",
+    "common.itemhandler.AbstractHorseMixin",
+    "common.itemhandler.LivingEntityMixin",
+    "common.itemhandler.PlayerMixin"
+  ],
+  "client": [
+    "accessor.LevelRendererAccessor",
+    "accessor.MinecraftAccessor",
+    "accessor.ModelBakeryAccessor",
+    "accessor.ScreenAccessor",
+    "client.BlockModelDeserializerMixin",
+    "client.CameraMixin",
+    "client.ClientLevelMixin",
+    "client.ClientLevelMixin$EntityCallbacksMixin",
+    "client.GameRendererMixin",
+    "client.GuiMixin",
+    "client.ItemInHandRendererMixin",
+    "client.ItemRendererMixin",
+    "client.KeyboardHandlerMixin",
+    "client.MinecraftMixin",
+    "client.MouseHandlerMixin",
+    "client.PlayerRendererMixin"
+  ],
+  "injectors": {
+    "defaultRequire": 1
+  },
+  "overwrites": {
+    "requireAnnotations": true
+  }
+}

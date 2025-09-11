@@ -1,0 +1,673 @@
+package com.atsuishio.superbwarfare.event;
+
+import cn.sh1rocu.superbwarfare.api.event.EntityItemPickupEvent;
+import com.atsuishio.superbwarfare.api.event.PreKillEvent;
+import com.atsuishio.superbwarfare.capability.LaserCapability;
+import com.atsuishio.superbwarfare.capability.ModCapabilities;
+import com.atsuishio.superbwarfare.capability.player.PlayerVariable;
+import com.atsuishio.superbwarfare.config.common.GameplayConfig;
+import com.atsuishio.superbwarfare.config.server.MiscConfig;
+import com.atsuishio.superbwarfare.config.server.VehicleConfig;
+import com.atsuishio.superbwarfare.data.gun.GunData;
+import com.atsuishio.superbwarfare.data.gun.GunProp;
+import com.atsuishio.superbwarfare.data.gun.value.ReloadState;
+import com.atsuishio.superbwarfare.entity.TargetEntity;
+import com.atsuishio.superbwarfare.entity.mixin.ICustomKnockback;
+import com.atsuishio.superbwarfare.entity.vehicle.base.ArmedVehicleEntity;
+import com.atsuishio.superbwarfare.entity.vehicle.base.AutoAimable;
+import com.atsuishio.superbwarfare.entity.vehicle.base.ContainerMobileVehicleEntity;
+import com.atsuishio.superbwarfare.entity.vehicle.base.VehicleEntity;
+import com.atsuishio.superbwarfare.init.*;
+import com.atsuishio.superbwarfare.item.gun.GunItem;
+import com.atsuishio.superbwarfare.network.message.receive.ClientIndicatorMessage;
+import com.atsuishio.superbwarfare.network.message.receive.DrawClientMessage;
+import com.atsuishio.superbwarfare.network.message.receive.LivingGunKillMessage;
+import com.atsuishio.superbwarfare.perk.Perk;
+import com.atsuishio.superbwarfare.tools.*;
+import io.github.fabricators_of_create.porting_lib.core.event.BaseEvent;
+import io.github.fabricators_of_create.porting_lib.entity.events.LivingAttackEvent;
+import io.github.fabricators_of_create.porting_lib.entity.events.LivingEntityEvents;
+import io.github.fabricators_of_create.porting_lib.entity.events.living.LivingHurtEvent;
+import io.github.fabricators_of_create.porting_lib.entity.events.living.MobEffectEvent;
+import net.fabricmc.fabric.api.networking.v1.PlayerLookup;
+import net.minecraft.network.chat.Component;
+import net.minecraft.network.protocol.game.ClientboundStopSoundPacket;
+import net.minecraft.resources.ResourceKey;
+import net.minecraft.server.level.ServerLevel;
+import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.sounds.SoundSource;
+import net.minecraft.util.Mth;
+import net.minecraft.world.damagesource.DamageSource;
+import net.minecraft.world.damagesource.DamageType;
+import net.minecraft.world.damagesource.DamageTypes;
+import net.minecraft.world.effect.MobEffectCategory;
+import net.minecraft.world.entity.*;
+import net.minecraft.world.entity.item.ItemEntity;
+import net.minecraft.world.entity.player.Player;
+import net.minecraft.world.entity.projectile.Projectile;
+import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.level.GameRules;
+import net.minecraft.world.level.block.entity.HopperBlockEntity;
+
+import java.util.ArrayList;
+import java.util.Collection;
+import java.util.Objects;
+import java.util.UUID;
+import java.util.stream.Stream;
+
+import static com.atsuishio.superbwarfare.entity.vehicle.base.VehicleEntity.AI_PASSENGER_WEAPON_TARGET_UUID;
+import static com.atsuishio.superbwarfare.entity.vehicle.base.VehicleEntity.AI_TURRET_TARGET_UUID;
+
+public class LivingEventHandler {
+
+    public static void onLivingChangeTargetEvent(LivingEntityEvents.ChangeTarget.ChangeTargetEvent event) {
+        if (event.getEntity() instanceof Mob mob && mob.getVehicle() instanceof VehicleEntity vehicle) {
+            if (mob == vehicle.getFirstPassenger()) {
+                if (event.getNewTarget() != null) {
+                    vehicle.getEntityData().set(AI_TURRET_TARGET_UUID, event.getNewTarget().getStringUUID());
+                } else {
+                    vehicle.getEntityData().set(AI_TURRET_TARGET_UUID, "undefined");
+                }
+            }
+
+            if (mob == vehicle.getNthEntity(1)) {
+                if (event.getNewTarget() != null) {
+                    vehicle.getEntityData().set(AI_PASSENGER_WEAPON_TARGET_UUID, event.getNewTarget().getStringUUID());
+                } else {
+                    vehicle.getEntityData().set(AI_PASSENGER_WEAPON_TARGET_UUID, "undefined");
+                }
+            }
+
+        }
+    }
+
+    public static void onEntityAttacked(LivingAttackEvent event) {
+        if (!event.getSource().is(ModDamageTypes.VEHICLE_EXPLOSION) && event.getEntity().getVehicle() instanceof VehicleEntity vehicle) {
+            if (event.getEntity().getVehicle() instanceof ArmedVehicleEntity iArmedVehicle && iArmedVehicle.getVehicleEntity().isEnclosed(event.getEntity())) {
+                if (!event.getSource().is(ModTags.DamageTypes.VEHICLE_NOT_ABSORB)) {
+                    vehicle.hurt(event.getSource(), event.getAmount());
+                }
+                event.setCanceled(true);
+            }
+        }
+    }
+
+    public static void onEntityHurt(LivingHurtEvent event) {
+        if (event == null || event.getEntity() == null) {
+            return;
+        }
+
+        handleVehicleHurt(event);
+        handleGunPerksWhenHurt(event);
+        renderDamageIndicator(event);
+        reduceDamage(event);
+        giveExpToWeapon(event);
+        handleGunLevels(event);
+    }
+
+    public static boolean onEntityDeath(LivingEntity entity, DamageSource damageSource, float damageAmount) {
+        if (entity == null) {
+            return true;
+        }
+
+        killIndication(entity, damageSource, damageAmount);
+        handleGunPerksWhenDeath(entity, damageSource, damageAmount);
+        handlePlayerKillEntity(entity, damageSource, damageAmount);
+        giveKillExpToWeapon(entity, damageSource, damageAmount);
+
+        if (entity instanceof Player player) {
+            handlePlayerBeamReset(player);
+        }
+
+        return true;
+    }
+
+    private static void handleVehicleHurt(LivingHurtEvent event) {
+        var vehicle = event.getEntity().getVehicle();
+        if (vehicle instanceof VehicleEntity && vehicle instanceof ArmedVehicleEntity iArmedVehicle) {
+            var source = event.getSource();
+            if (source.is(ModTags.DamageTypes.VEHICLE_IGNORE)) return;
+
+            if (iArmedVehicle.getVehicleEntity().isEnclosed(event.getEntity())) {
+                if (!source.is(ModDamageTypes.VEHICLE_EXPLOSION)) {
+                    event.setCanceled(true);
+                }
+            } else {
+                if (!source.is(ModTags.DamageTypes.VEHICLE_NOT_ABSORB)) {
+                    vehicle.hurt(event.getSource(), 0.7f * event.getAmount());
+                }
+
+                event.setAmount(0.3f * event.getAmount());
+            }
+        }
+    }
+
+    /**
+     * 计算伤害减免
+     */
+    private static void reduceDamage(LivingHurtEvent event) {
+        DamageSource source = event.getSource();
+        LivingEntity entity = event.getEntity();
+        if (entity == null) return;
+        Entity sourceEntity = source.getEntity();
+        if (sourceEntity == null) return;
+        if (sourceEntity.level().isClientSide) return;
+
+        double amount = event.getAmount();
+        double damage = amount;
+
+        ItemStack stack = sourceEntity instanceof LivingEntity living ? living.getMainHandItem() : ItemStack.EMPTY;
+
+        // 距离衰减
+        if (DamageTypeTool.isGunDamage(source) && stack.getItem() instanceof GunItem) {
+            var data = GunData.from(stack);
+            double distance = entity.position().distanceTo(sourceEntity.position());
+            damage = reduceDamageByDistance(amount, distance, data.getDamageReduceRate(), data.getDamageReduceMinDistance());
+        }
+
+        // 计算防弹插板减伤
+        ItemStack armor = entity.getItemBySlot(EquipmentSlot.CHEST);
+
+        if (armor != ItemStack.EMPTY && armor.getTag() != null && armor.getTag().contains("ArmorPlate")) {
+            double armorValue = armor.getOrCreateTag().getDouble("ArmorPlate");
+            armor.getOrCreateTag().putDouble("ArmorPlate", Math.max(armorValue - damage, 0));
+            damage = Math.max(damage - armorValue, 0);
+        }
+
+        // 计算防弹护具减伤
+        if (source.is(ModTags.DamageTypes.PROJECTILE) || source.is(DamageTypes.MOB_PROJECTILE)) {
+            damage *= 1 - 0.8 * Mth.clamp(entity.getAttributeValue(ModAttributes.BULLET_RESISTANCE), 0, 1);
+        }
+
+        if (source.is(ModTags.DamageTypes.PROJECTILE_ABSOLUTE)) {
+            damage *= 1 - 0.2 * Mth.clamp(entity.getAttributeValue(ModAttributes.BULLET_RESISTANCE), 0, 1);
+        }
+
+        if (source.is(ModDamageTypes.PROJECTILE_EXPLOSION) || source.is(ModDamageTypes.MINE) || source.is(ModDamageTypes.PROJECTILE_HIT) || source.is(ModDamageTypes.CUSTOM_EXPLOSION)
+                || source.is(DamageTypes.EXPLOSION) || source.is(DamageTypes.PLAYER_EXPLOSION)) {
+            damage *= 1 - 0.3 * Mth.clamp(entity.getAttributeValue(ModAttributes.BULLET_RESISTANCE), 0, 1);
+        }
+
+        event.setAmount((float) damage);
+
+        if (entity instanceof TargetEntity && sourceEntity instanceof Player player) {
+            if (event.getSource().is(ModDamageTypes.BEAST)) {
+                damage = Float.POSITIVE_INFINITY;
+            }
+
+            player.displayClientMessage(Component.translatable("tips.superbwarfare.target.damage",
+                    FormatTool.format2D(damage),
+                    FormatTool.format1D(entity.position().distanceTo(sourceEntity.position()), "m")), false);
+        }
+    }
+
+    private static double reduceDamageByDistance(double amount, double distance, double rate, double minDistance) {
+        return amount / (1 + rate * Math.max(0, distance - minDistance));
+    }
+
+    /**
+     * 根据造成的伤害，提供武器经验
+     */
+    private static void giveExpToWeapon(LivingHurtEvent event) {
+        DamageSource source = event.getSource();
+        if (source == null) return;
+        Entity sourceEntity = source.getEntity();
+        if (!(sourceEntity instanceof Player player)) return;
+        ItemStack stack = player.getMainHandItem();
+        if (!(stack.getItem() instanceof GunItem)) return;
+        if (event.getEntity().getType().is(ModTags.EntityTypes.NO_EXPERIENCE)) return;
+
+        var data = GunData.from(stack);
+        double amount = Math.min(0.125 * event.getAmount(), event.getEntity().getMaxHealth());
+
+        // 先处理发射器类武器或高爆弹的爆炸伤害
+        if (source.is(ModDamageTypes.PROJECTILE_EXPLOSION)) {
+            if (stack.is(ModTags.Items.LAUNCHER) || GunData.from(stack).perk.getLevel(ModPerks.HE_BULLET) > 0) {
+                data.exp.set(data.exp.get() + amount);
+            }
+        }
+
+        // 再判断是不是枪械能造成的伤害
+        if (!DamageTypeTool.isGunDamage(source)) return;
+
+        data.exp.set(data.exp.get() + amount);
+    }
+
+    private static void giveKillExpToWeapon(LivingEntity entity, DamageSource source, float damageAmount) {
+        if (source == null) return;
+        Entity sourceEntity = source.getEntity();
+        if (!(sourceEntity instanceof Player player)) return;
+        ItemStack stack = player.getMainHandItem();
+        if (!(stack.getItem() instanceof GunItem)) return;
+        if (entity.getType().is(ModTags.EntityTypes.NO_EXPERIENCE)) return;
+
+        var data = GunData.from(stack);
+        double amount = 20 + 2 * entity.getMaxHealth();
+
+        // 先处理发射器类武器或高爆弹的爆炸伤害
+        if (source.is(ModDamageTypes.PROJECTILE_EXPLOSION)) {
+            if (stack.is(ModTags.Items.LAUNCHER) || GunData.from(stack).perk.getLevel(ModPerks.HE_BULLET) > 0) {
+                data.exp.set(data.exp.get() + amount);
+            }
+        }
+
+        // 再判断是不是枪械能造成的伤害
+        if (DamageTypeTool.isGunDamage(source)) {
+            data.exp.set(data.exp.get() + amount);
+        }
+
+        // 提升武器等级
+        int level = data.level.get();
+        double exp = data.exp.get();
+        double upgradeExpNeeded = 20 * Math.pow(level, 2) + 160 * level + 20;
+
+        while (exp >= upgradeExpNeeded) {
+            exp -= upgradeExpNeeded;
+            level = data.level.get() + 1;
+            upgradeExpNeeded = 20 * Math.pow(level, 2) + 160 * level + 20;
+            data.exp.set(exp);
+            data.level.set(level);
+            data.upgradePoint.set(data.upgradePoint.get() + 0.5);
+        }
+    }
+
+    private static void handleGunLevels(LivingHurtEvent event) {
+        DamageSource source = event.getSource();
+        if (source == null) return;
+        Entity sourceEntity = source.getEntity();
+        if (!(sourceEntity instanceof Player player)) return;
+        ItemStack stack = player.getMainHandItem();
+        if (!(stack.getItem() instanceof GunItem)) return;
+        if (event.getEntity().getType().is(ModTags.EntityTypes.NO_EXPERIENCE)) return;
+
+        var data = GunData.from(stack);
+        int level = data.level.get();
+        double exp = data.exp.get();
+        double upgradeExpNeeded = 20 * Math.pow(level, 2) + 160 * level + 20;
+
+        while (exp >= upgradeExpNeeded) {
+            exp -= upgradeExpNeeded;
+            level = data.level.get() + 1;
+            upgradeExpNeeded = 20 * Math.pow(level, 2) + 160 * level + 20;
+            data.exp.set(exp);
+            data.level.set(level);
+            data.upgradePoint.set(data.upgradePoint.get() + 0.5);
+        }
+    }
+
+    private static void killIndication(LivingEntity entity, DamageSource source, float damageAmount) {
+        if (!MiscConfig.SEND_KILL_FEEDBACK.get()) return;
+
+        var sourceEntity = source.getEntity();
+        if (sourceEntity == null) {
+            return;
+        }
+
+        // 如果配置不选择全局伤害提示，则只在伤害类型为mod添加的时显示指示器
+        if (!GameplayConfig.GLOBAL_INDICATION.get() && !DamageTypeTool.isModDamage(source)) {
+            return;
+        }
+
+        if (!sourceEntity.level().isClientSide() && sourceEntity instanceof ServerPlayer player) {
+            var indicator = new PreKillEvent.Indicator(player, source, entity);
+            PreKillEvent.INDICATOR.invoker().post(indicator);
+            if (indicator.isCanceled()) {
+                return;
+            }
+
+            SoundTool.playLocalSound(player, ModSounds.TARGET_DOWN, 3f, 1f);
+
+            new ClientIndicatorMessage(2, 8).send(player);
+        }
+    }
+
+    private static void renderDamageIndicator(LivingHurtEvent event) {
+        if (event == null || event.getEntity() == null) {
+            return;
+        }
+
+        var damagesource = event.getSource();
+        var sourceEntity = damagesource.getEntity();
+
+        if (sourceEntity == null) {
+            return;
+        }
+
+        if (sourceEntity instanceof ServerPlayer player && (damagesource.is(DamageTypes.EXPLOSION) || damagesource.is(DamageTypes.PLAYER_EXPLOSION)
+                || damagesource.is(ModDamageTypes.MINE) || damagesource.is(ModDamageTypes.PROJECTILE_EXPLOSION))) {
+            SoundTool.playLocalSound(player, ModSounds.INDICATION, 1f, 1f);
+
+            new ClientIndicatorMessage(0, 5).send(player);
+        }
+    }
+
+    /**
+     * 换弹时切换枪械，取消换弹音效播放
+     */
+    public static void handleChangeSlot(LivingEntity livingEntity, EquipmentSlot equipmentSlot, ItemStack oldStack, ItemStack newStack) {
+        if (livingEntity instanceof Player player && equipmentSlot == EquipmentSlot.MAINHAND) {
+            if (player.level().isClientSide) {
+                return;
+            }
+
+            ModCapabilities.LASER_CAPABILITY.maybeGet(player).ifPresent(LaserCapability.ILaserCapability::stop);
+
+            if (player instanceof ServerPlayer serverPlayer) {
+                if (newStack.getItem() instanceof GunItem) {
+                    checkCopyGuns(newStack, player);
+                }
+
+                if (newStack.getItem() != oldStack.getItem()
+                        || newStack.getTag() == null || oldStack.getTag() == null
+                        || (newStack.getItem() instanceof GunItem && !GunData.from(newStack).initialized())
+                        || (oldStack.getItem() instanceof GunItem && !GunData.from(newStack).initialized())
+                        || (newStack.getItem() instanceof GunItem && oldStack.getItem() instanceof GunItem && !Objects.equals(GunsTool.getGunUUID(newStack), GunsTool.getGunUUID(oldStack)))
+                ) {
+                    if (oldStack.getItem() instanceof GunItem oldGun) {
+                        stopGunReloadSound(serverPlayer, oldGun);
+
+                        var oldData = GunData.from(oldStack);
+
+                        if (oldData.get(GunProp.BOLT_ACTION_TIME) > 0) {
+                            oldData.bolt.actionTimer.reset();
+                        }
+
+                        oldData.reload.setTime(0);
+
+                        oldData.reload.setState(ReloadState.NOT_RELOADING);
+
+                        if (oldData.get(GunProp.ITERATIVE_TIME) != 0) {
+                            oldData.stopped.set(false);
+                            oldData.forceStop.set(false);
+                            oldData.reload.setStage(0);
+                            oldData.reload.prepareTimer.reset();
+                            oldData.reload.prepareLoadTimer.reset();
+                            oldData.reload.iterativeLoadTimer.reset();
+                            oldData.reload.finishTimer.reset();
+                        }
+
+                        if (oldStack.is(ModItems.SENTINEL)) {
+                            oldData.charge.timer.reset();
+                        }
+
+                        oldGun.onChangeSlot(oldStack, player);
+                    }
+
+                    if (newStack.getItem() instanceof GunItem) {
+                        var newData = GunData.from(newStack);
+
+                        if (newData.get(GunProp.BOLT_ACTION_TIME) > 0) {
+                            newData.bolt.actionTimer.reset();
+                        }
+
+                        newData.reload.setState(ReloadState.NOT_RELOADING);
+                        newData.reload.reloadTimer.reset();
+
+                        if (newData.get(GunProp.ITERATIVE_TIME) != 0) {
+                            newData.forceStop.set(false);
+                            newData.stopped.set(false);
+                            newData.reload.setStage(0);
+                            newData.reload.prepareTimer.reset();
+                            newData.reload.prepareLoadTimer.reset();
+                            newData.reload.iterativeLoadTimer.reset();
+                            newData.reload.finishTimer.reset();
+                        }
+
+                        if (newStack.is(ModItems.SENTINEL)) {
+                            newData.charge.timer.reset();
+                        }
+
+                        for (Perk.Type type : Perk.Type.values()) {
+                            var instance = newData.perk.getInstance(type);
+                            if (instance != null) {
+                                instance.perk().onChangeSlot(newData, instance, player);
+                            }
+                        }
+
+                        if (player.level() instanceof ServerLevel) {
+                            new DrawClientMessage(true).send(serverPlayer);
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    private static void checkCopyGuns(ItemStack stack, Player player) {
+        var data = GunData.from(stack);
+        if (!data.initialized()) return;
+        if (data.data == null) return;
+        var uuid = data.data.getUUID("UUID");
+
+        for (var item : player.getInventory().items) {
+            if (item.equals(stack)) continue;
+            if (item.getItem() instanceof GunItem) {
+                var itemData = GunData.from(item);
+                var dataTag = itemData.data;
+                if (dataTag == null) continue;
+                if (!dataTag.hasUUID("UUID")) continue;
+                if (dataTag.getUUID("UUID").equals(uuid)) {
+                    data.data.putUUID("UUID", UUID.randomUUID());
+                    return;
+                }
+            }
+        }
+    }
+
+    private static void stopGunReloadSound(ServerPlayer player, GunItem gun) {
+        gun.getReloadSound().forEach(sound -> player.connection.send(new ClientboundStopSoundPacket(sound.getLocation(), SoundSource.PLAYERS)));
+    }
+
+    /**
+     * 发送击杀消息
+     */
+    private static void handlePlayerKillEntity(LivingEntity entity, DamageSource source, float damageAmount) {
+        ResourceKey<DamageType> damageTypeResourceKey = source.typeHolder().unwrapKey().isPresent() ? source.typeHolder().unwrapKey().get() : DamageTypes.GENERIC;
+
+        LivingEntity attacker = null;
+        if (source.getEntity() instanceof LivingEntity living) {
+            if (living instanceof ServerPlayer player) {
+                attacker = player;
+            } else {
+                attacker = living;
+            }
+        }
+        if (source.getDirectEntity() instanceof Projectile projectile && projectile.getOwner() instanceof LivingEntity living) {
+            if (living instanceof ServerPlayer player) {
+                attacker = player;
+            } else if (living instanceof OwnableEntity ownableEntity && ownableEntity.getOwner() instanceof ServerPlayer) {
+                attacker = living;
+            }
+        }
+
+        var sendKillMessage = new PreKillEvent.SendKillMessage(attacker, source, entity);
+        PreKillEvent.SEND_KILL_MESSAGE.invoker().post(sendKillMessage);
+        if (sendKillMessage.isCanceled()) {
+            return;
+        }
+
+        if (attacker != null && MiscConfig.SEND_KILL_FEEDBACK.get() && attacker.level() instanceof ServerLevel serverLevel) {
+            if (DamageTypeTool.isHeadshotDamage(source)) {
+                new LivingGunKillMessage(attacker.getId(), entity.getId(), true, damageTypeResourceKey).send(PlayerLookup.all(serverLevel.getServer()));
+            } else {
+                new LivingGunKillMessage(attacker.getId(), entity.getId(), false, damageTypeResourceKey).send(PlayerLookup.all(serverLevel.getServer()));
+            }
+        }
+    }
+
+    private static void handleGunPerksWhenHurt(LivingHurtEvent event) {
+        DamageSource source = event.getSource();
+        if (!DamageTypeTool.isGunDamage(source)) return;
+
+        LivingEntity attacker = null;
+        if (source.getEntity() instanceof LivingEntity living) {
+            attacker = living;
+        }
+        if (source.getDirectEntity() instanceof Projectile projectile && projectile.getOwner() instanceof LivingEntity living) {
+            attacker = living;
+        }
+        if (attacker == null) {
+            return;
+        }
+
+        ItemStack stack = attacker.getMainHandItem();
+        if (!(stack.getItem() instanceof GunItem)) {
+            return;
+        }
+
+        float damage = event.getAmount();
+
+        GunData data = GunData.from(stack);
+        for (Perk.Type type : Perk.Type.values()) {
+            var instance = data.perk.getInstance(type);
+            if (instance != null) {
+                damage = instance.perk().getModifiedDamage(damage, data, instance, event.getEntity(), source);
+                instance.perk().onHurtEntity(damage, data, instance, event.getEntity(), source);
+            }
+        }
+
+        event.setAmount(damage);
+    }
+
+    private static void handleGunPerksWhenDeath(LivingEntity entity, DamageSource source, float damageAmount) {
+        if (!DamageTypeTool.isGunDamage(source)) return;
+
+        LivingEntity attacker = null;
+        if (source.getEntity() instanceof LivingEntity living) {
+            attacker = living;
+        }
+        if (source.getDirectEntity() instanceof Projectile projectile && projectile.getOwner() instanceof LivingEntity living) {
+            attacker = living;
+        }
+        if (attacker == null) {
+            return;
+        }
+
+        ItemStack stack = attacker.getMainHandItem();
+        if (!(stack.getItem() instanceof GunItem)) {
+            return;
+        }
+
+        GunData data = GunData.from(stack);
+        for (Perk.Type type : Perk.Type.values()) {
+            var instance = data.perk.getInstance(type);
+            if (instance != null) {
+                instance.perk().onKill(data, instance, entity, source);
+            }
+        }
+    }
+
+    public static void onPickup(EntityItemPickupEvent event) {
+        if (!VehicleConfig.VEHICLE_ITEM_PICKUP.get()) return;
+        if (event.getEntity().getVehicle() instanceof ContainerMobileVehicleEntity containerMobileVehicleEntity) {
+            var pickUp = event.getItem();
+            if (!containerMobileVehicleEntity.level().isClientSide) {
+                HopperBlockEntity.addItem(containerMobileVehicleEntity, pickUp);
+            }
+            event.setCanceled(true);
+        }
+    }
+
+    public static boolean onLivingDrops(LivingEntity target, DamageSource source, Collection<ItemEntity> drops, int lootingLevel, boolean recentlyHit) {
+        // 死亡掉落弹药盒
+        if (target instanceof Player player && !player.level().getLevelData().getGameRules().getBoolean(GameRules.RULE_KEEPINVENTORY)) {
+            var cap = ModCapabilities.PLAYER_VARIABLE.maybeGet(player).orElse(new PlayerVariable());
+            cap.watch();
+
+            boolean drop = Stream.of(Ammo.values())
+                    .mapToInt(type -> type.get(cap))
+                    .sum() > 0;
+
+            if (drop) {
+                var stack = new ItemStack(ModItems.AMMO_BOX);
+
+                for (var type : Ammo.values()) {
+                    type.set(stack, type.get(cap));
+                    type.set(cap, 0);
+                }
+
+                stack.getOrCreateTag().putBoolean("All", true);
+                stack.getOrCreateTag().putBoolean("IsDrop", true);
+
+                cap.sync(player);
+                drops.add(new ItemEntity(player.level(), player.getX(), player.getY() + 1, player.getZ(), stack));
+            }
+        }
+
+        if (source == null) return false;
+        Entity sourceEntity = source.getEntity();
+        if (!(sourceEntity instanceof Player player)) return false;
+
+        // 创生物收集掉落物
+        if (VehicleConfig.COLLECT_DROPS_BY_CRASHING.get()
+                && player.getVehicle() instanceof ContainerMobileVehicleEntity containerMobileVehicleEntity
+                && source.is(ModDamageTypes.VEHICLE_STRIKE)
+        ) {
+            var removed = new ArrayList<ItemEntity>();
+
+            drops.forEach(itemEntity -> {
+                ItemStack stack = itemEntity.getItem();
+
+                InventoryTool.insertItem(containerMobileVehicleEntity.getItemStacks(), stack);
+
+                if (stack.getCount() <= 0) {
+                    player.drop(stack, false);
+                    removed.add(itemEntity);
+                }
+            });
+
+            drops.removeAll(removed);
+        }
+        return false;
+    }
+
+    public static int onLivingExperienceDrop(int exp, Player player, LivingEntity entity) {
+        if (player == null) return exp;
+
+        if (player.getVehicle() instanceof ArmedVehicleEntity) {
+            player.giveExperiencePoints(exp);
+            return 0;
+        }
+
+        return exp;
+    }
+
+    public static void handlePlayerBeamReset(Player player) {
+        ModCapabilities.LASER_CAPABILITY.maybeGet(player).ifPresent(LaserCapability.ILaserCapability::end);
+    }
+
+    public static double onKnockback(double strength, Player player) {
+        ICustomKnockback knockback = ICustomKnockback.getInstance(player);
+        if (knockback.superbWarfare$getKnockbackStrength() >= 0) {
+            return knockback.superbWarfare$getKnockbackStrength();
+        }
+        return strength;
+    }
+
+    public static void onEntityFall(LivingEntityEvents.Fall.FallEvent event) {
+        if (event.getEntity() instanceof LivingEntity living && living.getVehicle() instanceof VehicleEntity) {
+            event.setCanceled(true);
+        }
+    }
+
+    public static void onPreSendKillMessage(PreKillEvent.SendKillMessage event) {
+        if (event.getSource().getDirectEntity() instanceof AutoAimable && !(event.getTarget() instanceof Player)) {
+            event.setCanceled(true);
+        }
+    }
+
+    public static void onPreIndicator(PreKillEvent.Indicator event) {
+        if (event.getSource().getDirectEntity() instanceof AutoAimable && !(event.getTarget() instanceof Player)) {
+            event.setCanceled(true);
+        }
+    }
+
+    public static void onEffectApply(MobEffectEvent.Applicable event) {
+        if (event.getEffectInstance().getEffect().getCategory() == MobEffectCategory.HARMFUL
+                && event.getEntity().getVehicle() instanceof VehicleEntity vehicle
+                && vehicle.isEnclosed(vehicle.getSeatIndex(event.getEntity()))
+        ) {
+            event.setResult(BaseEvent.Result.DENY);
+        }
+    }
+}

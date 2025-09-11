@@ -1,0 +1,40 @@
+package com.atsuishio.superbwarfare.capability.energy;
+
+import net.fabricmc.fabric.api.transfer.v1.transaction.TransactionContext;
+import team.reborn.energy.api.EnergyStorage;
+
+/**
+ * 无限供电能力，纯逆天
+ */
+// Fabric: TechReborn的EnergyAPI自带同类名的无限供电
+public class InfinityEnergyStorage implements EnergyStorage {
+    @Override
+    public long insert(long maxAmount, TransactionContext transaction) {
+        return 0;
+    }
+
+    @Override
+    public long extract(long maxAmount, TransactionContext transaction) {
+        return maxAmount;
+    }
+
+    @Override
+    public long getAmount() {
+        return Long.MAX_VALUE;
+    }
+
+    @Override
+    public long getCapacity() {
+        return Long.MAX_VALUE;
+    }
+
+    @Override
+    public boolean supportsInsertion() {
+        return false;
+    }
+
+    @Override
+    public boolean supportsExtraction() {
+        return true;
+    }
+}

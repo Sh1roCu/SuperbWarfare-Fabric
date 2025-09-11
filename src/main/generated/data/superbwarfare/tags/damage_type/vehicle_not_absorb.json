@@ -1,0 +1,10 @@
+{
+  "replace": false,
+  "values": [
+    "minecraft:explosion",
+    "minecraft:player_explosion",
+    "superbwarfare:custom_explosion",
+    "superbwarfare:mine",
+    "superbwarfare:projectile_explosion"
+  ]
+}

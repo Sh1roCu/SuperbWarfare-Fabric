@@ -1,0 +1,98 @@
+package com.atsuishio.superbwarfare.network;
+
+import com.atsuishio.superbwarfare.client.overlay.CrossHairOverlay;
+import com.atsuishio.superbwarfare.client.screens.FuMO25ScreenHelper;
+import com.atsuishio.superbwarfare.client.screens.VehicleAssemblingScreen;
+import com.atsuishio.superbwarfare.config.client.KillMessageConfig;
+import com.atsuishio.superbwarfare.config.server.MiscConfig;
+import com.atsuishio.superbwarfare.event.ClientEventHandler;
+import com.atsuishio.superbwarfare.event.KillMessageHandler;
+import com.atsuishio.superbwarfare.menu.EnergyMenu;
+import com.atsuishio.superbwarfare.network.message.receive.*;
+import com.atsuishio.superbwarfare.tools.LivingKillRecord;
+import net.minecraft.client.CameraType;
+import net.minecraft.client.Minecraft;
+import net.minecraft.resources.ResourceKey;
+import net.minecraft.world.damagesource.DamageType;
+import net.minecraft.world.entity.Entity;
+import net.minecraft.world.entity.LivingEntity;
+import net.minecraft.world.entity.player.Player;
+
+import java.util.List;
+import java.util.Objects;
+
+public class ClientPacketHandler {
+
+    public static void handleLivingKillMessage(LivingEntity attacker, Entity target, boolean headshot, ResourceKey<DamageType> damageType) {
+        if (KillMessageHandler.QUEUE.size() >= KillMessageConfig.KILL_MESSAGE_COUNT.get()) {
+            KillMessageHandler.QUEUE.poll();
+        }
+        KillMessageHandler.QUEUE.offer(new LivingKillRecord(attacker, target, attacker.getMainHandItem(), headshot, damageType));
+    }
+
+    public static void handleClientIndicatorMessage(ClientIndicatorMessage message) {
+        switch (message.type) {
+            case 1 -> CrossHairOverlay.HEAD_INDICATOR = message.value;
+            case 2 -> CrossHairOverlay.KILL_INDICATOR = message.value;
+            case 3 -> CrossHairOverlay.VEHICLE_INDICATOR = message.value;
+            default -> CrossHairOverlay.HIT_INDICATOR = message.value;
+        }
+    }
+
+    public static void handleContainerDataMessage(int containerId, List<ContainerDataMessage.Pair> data) {
+        Minecraft mc = Minecraft.getInstance();
+        if (mc.player != null && mc.player.containerMenu.containerId == containerId) {
+            data.forEach(p -> ((EnergyMenu) mc.player.containerMenu).setData(p.id, p.data));
+        }
+    }
+
+    public static void handleRadarMenuOpen(RadarMenuOpenMessage message) {
+        FuMO25ScreenHelper.resetEntities();
+        FuMO25ScreenHelper.pos = message.pos;
+    }
+
+    public static void handleRadarMenuClose() {
+        FuMO25ScreenHelper.resetEntities();
+        FuMO25ScreenHelper.pos = null;
+    }
+
+    public static void handleResetCameraType() {
+        Minecraft minecraft = Minecraft.getInstance();
+        Player player = minecraft.player;
+        if (player == null) return;
+
+        Minecraft.getInstance().options.setCameraType(Objects.requireNonNullElse(ClientEventHandler.lastCameraType, CameraType.FIRST_PERSON));
+    }
+
+    public static void handleClientSyncMotion(ClientMotionSyncMessage message) {
+        var level = Minecraft.getInstance().level;
+        if (level == null) return;
+        Entity entity = level.getEntity(message.id);
+        if (entity != null) {
+            entity.lerpMotion(message.x, message.y, message.z);
+        }
+    }
+
+    public static void handleClientTacticalSprintSync(boolean flag) {
+        MiscConfig.ALLOW_TACTICAL_SPRINT.set(flag);
+        MiscConfig.ALLOW_TACTICAL_SPRINT.save();
+    }
+
+    public static void handleClientSetMotion(ClientSetMotionMessage message) {
+        Minecraft minecraft = Minecraft.getInstance();
+        Player player = minecraft.player;
+        if (player != null) {
+            player.setDeltaMovement(message.motion().x, message.motion().y, message.motion().z);
+        }
+    }
+
+    public static void handleFinishAssemblingVehicleMessage(FinishAssemblingVehicleMessage message) {
+        Minecraft minecraft = Minecraft.getInstance();
+        Player player = minecraft.player;
+        if (player == null) return;
+        if (player.containerMenu.containerId != message.containerId()) return;
+        if (minecraft.screen instanceof VehicleAssemblingScreen screen) {
+            screen.finishAssembling();
+        }
+    }
+}

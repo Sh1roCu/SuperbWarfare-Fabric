@@ -39,12 +39,11 @@ public class ModTabs {
                     .title(Component.translatable("item_group.superbwarfare.guns"))
                     .icon(() -> new ItemStack(ModItems.TASER))
                     .displayItems((param, output) -> ModItems.GUN_ITEMS.forEach(gun -> {
+                        output.accept(gun);
                         if (gun instanceof SimpleEnergyItem energyGun) {
                             var stack = new ItemStack(gun);
                             energyGun.setStoredEnergy(stack, energyGun.getEnergyCapacity(stack));
                             output.accept(stack);
-                        } else {
-                            output.accept(gun);
                         }
                     }))
                     .build());
@@ -81,14 +80,15 @@ public class ModTabs {
                     .title(Component.translatable("item_group.superbwarfare.item"))
                     .icon(() -> new ItemStack(ModItems.TARGET_DEPLOYER))
                     .displayItems((param, output) -> ModItems.ITEMS.forEach(item -> {
+                        output.accept(item);
                         if (item == ModItems.ARMOR_PLATE) {
                             output.accept(ArmorPlate.getInfiniteInstance());
-                        } else if (item instanceof BatteryItem batteryItem) {
+                        }
+                        if (item instanceof BatteryItem batteryItem) {
                             output.accept(batteryItem.makeFullEnergyStack());
-                        } else if (item == ModItems.ELECTRIC_BATON) {
-                            output.accept(((ElectricBaton) item).makeFullEnergyStack());
-                        } else {
-                            output.accept(item);
+                        }
+                        if (item instanceof ElectricBaton electricBaton) {
+                            output.accept(electricBaton.makeFullEnergyStack());
                         }
                     }))
                     .build());

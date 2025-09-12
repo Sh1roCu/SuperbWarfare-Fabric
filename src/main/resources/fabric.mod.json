@@ -3,7 +3,7 @@
   "id": "superbwarfare",
   "version": "${version}",
   "name": "SuperbWarfare",
-  "description": "An unofficial Fabric port of Superbwarfare",
+  "description": "An unofficial Fabric port of SuperbWarfare",
   "authors": [
     "Sh1roCu"
   ],

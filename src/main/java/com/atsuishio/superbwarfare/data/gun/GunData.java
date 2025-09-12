@@ -578,33 +578,31 @@ public class GunData implements DefaultDataSupplier<DefaultGunData> {
             }
         });
 
-        var perks = ModPerks.PERKS;
-        var perkValues = perks.stream().toList();
-        var perkKeys = perks.keySet().stream().map(ResourceLocation::toString).toList();
+        var perkKeys = ModPerks.PERKS.keySet().stream().map(ResourceLocation::toString).toList();
 
         for (String name : sortedNames) {
             if (name.startsWith("@")) {
                 String type = name.substring(1);
                 switch (type) {
                     case "Ammo" ->
-                            availablePerks.addAll(perkValues.stream().filter(perk -> perk.type == Perk.Type.AMMO).toList());
+                            availablePerks.addAll(ModPerks.PERKS.stream().filter(perk -> perk.type == Perk.Type.AMMO).toList());
                     case "Functional" ->
-                            availablePerks.addAll(perkValues.stream().filter(perk -> perk.type == Perk.Type.FUNCTIONAL).toList());
+                            availablePerks.addAll(ModPerks.PERKS.stream().filter(perk -> perk.type == Perk.Type.FUNCTIONAL).toList());
                     case "Damage" ->
-                            availablePerks.addAll(perkValues.stream().filter(perk -> perk.type == Perk.Type.DAMAGE).toList());
+                            availablePerks.addAll(ModPerks.PERKS.stream().filter(perk -> perk.type == Perk.Type.DAMAGE).toList());
                 }
             } else if (name.startsWith("!")) {
                 String n = name.substring(1);
                 var index = perkKeys.indexOf(n);
                 if (index != -1) {
-                    availablePerks.remove(perkValues.get(index));
+                    availablePerks.remove(ModPerks.PERKS.stream().toList().get(index));
                 } else {
                     Mod.LOGGER.info("Perk {} not found", n);
                 }
             } else {
                 var index = perkKeys.indexOf(name);
                 if (index != -1) {
-                    availablePerks.add(perkValues.get(index));
+                    availablePerks.add(ModPerks.PERKS.stream().toList().get(index));
                 } else {
                     Mod.LOGGER.info("Perk {} not found", name);
                 }

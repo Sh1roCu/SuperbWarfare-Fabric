@@ -66,7 +66,6 @@ public class SuperbWarfareFabric implements ModInitializer {
             }
         });
 
-        PotionMortarShell.onRegisterColorHandlers();
         CriteriaRegister.setup();
         registerItemStorages();
         registerEnergyStorages();

@@ -26,7 +26,7 @@ import static com.atsuishio.superbwarfare.tools.ParticleTool.sendParticle;
 public class EntityUtilMixin {
 
     @Inject(method = "getHitResult(Lnet/minecraft/world/entity/projectile/Projectile;Lnet/minecraft/world/entity/Entity;Lnet/minecraft/world/phys/Vec3;Lnet/minecraft/world/phys/Vec3;)Lcom/tacz/guns/entity/EntityKineticBullet$EntityResult;",
-            at = @At("HEAD"), cancellable = true, remap = false)
+            at = @At("HEAD"), cancellable = true)
     private static void getHitResult(Projectile bulletEntity, Entity entity, Vec3 startVec, Vec3 endVec, CallbackInfoReturnable<EntityKineticBullet.EntityResult> cir) {
         if (entity instanceof OBBEntity obbEntity) {
             var obbList = obbEntity.getOBBs();

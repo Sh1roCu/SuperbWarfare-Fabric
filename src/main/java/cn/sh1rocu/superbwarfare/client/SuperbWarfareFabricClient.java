@@ -5,7 +5,6 @@ import com.atsuishio.superbwarfare.Mod;
 import com.atsuishio.superbwarfare.client.ClickHandler;
 import com.atsuishio.superbwarfare.client.ClientRenderHandler;
 import com.atsuishio.superbwarfare.client.language.ClientLanguageGetter;
-import com.atsuishio.superbwarfare.client.model.curio.ParachuteModel;
 import com.atsuishio.superbwarfare.client.renderer.curio.ParachuteRenderer;
 import com.atsuishio.superbwarfare.client.renderer.special.ContainerBlockPreview;
 import com.atsuishio.superbwarfare.client.screens.FuMO25ScreenHelper;
@@ -14,21 +13,16 @@ import com.atsuishio.superbwarfare.event.ClientEventHandler;
 import com.atsuishio.superbwarfare.event.ClientMouseHandler;
 import com.atsuishio.superbwarfare.event.KillMessageHandler;
 import com.atsuishio.superbwarfare.init.*;
+import com.atsuishio.superbwarfare.item.common.ammo.PotionMortarShell;
 import com.atsuishio.superbwarfare.network.NetworkRegistry;
 import com.atsuishio.superbwarfare.tools.VectorUtil;
-import com.mojang.blaze3d.vertex.PoseStack;
 import io.github.fabricators_of_create.porting_lib.event.client.RenderPlayerEvents;
 import io.github.fabricators_of_create.porting_lib.item.api.client.callbacks.ItemDecorationsCallback;
 import net.fabricmc.api.ClientModInitializer;
 import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientLifecycleEvents;
 import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientTickEvents;
-import net.fabricmc.fabric.api.client.rendering.v1.LivingEntityFeatureRendererRegistrationCallback;
 import net.fabricmc.fabric.api.client.rendering.v1.WorldRenderEvents;
 import net.fabricmc.fabric.api.client.screen.v1.ScreenEvents;
-import net.minecraft.client.model.EntityModel;
-import net.minecraft.client.renderer.MultiBufferSource;
-import net.minecraft.client.renderer.entity.layers.RenderLayer;
-import net.minecraft.world.entity.LivingEntity;
 
 public class SuperbWarfareFabricClient implements ClientModInitializer {
 
@@ -50,6 +44,7 @@ public class SuperbWarfareFabricClient implements ClientModInitializer {
         ClientRenderHandler.registerRenderers();
         ClientRenderHandler.onClientSetup();
         ClientRenderHandler.registerLayers();
+        PotionMortarShell.onRegisterColorHandlers();
         ModEntityRenderers.registerEntityRenderers();
         ModKeyMappings.registerKeyMappings();
         ModParticles.registerParticles();

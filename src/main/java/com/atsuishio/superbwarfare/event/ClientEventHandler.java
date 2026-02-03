@@ -69,7 +69,6 @@ import team.reborn.energy.api.EnergyStorage;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicBoolean;
 
-@Environment(EnvType.CLIENT)
 public class ClientEventHandler {
 
     public static double zoomTime = 0;

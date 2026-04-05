@@ -36,7 +36,7 @@ public abstract class ServerLevelMixin extends Level {
         return call;
     }
 
-    @Mixin(targets = "net.minecraft.server.level.ServerLevel.EntityCallbacks")
+    @Mixin(targets = "net.minecraft.server.level.ServerLevel$EntityCallbacks")
     public static abstract class EntityCallbacksMixin {
         @Inject(method = "onTrackingEnd(Lnet/minecraft/world/entity/Entity;)V", at = @At("TAIL"))
         private void sw$removedFromLevel(Entity entity, CallbackInfo ci) {
